@@ -182,13 +182,15 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def inline_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.inline_query.from_user.id
     referral_link = f"https://t.me/{context.bot.username}?start={user_id}"
+    
     results = [
         InlineQueryResultArticle(
             id=str(uuid.uuid4()),
             title="Моя реферальная ссылка",
-            InputTextMessageContent(referral_link)
+            input_message_content=InputTextMessageContent(message_text=referral_link)
         )
     ]
+    
     await update.inline_query.answer(results)
 
 
