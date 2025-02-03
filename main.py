@@ -271,7 +271,7 @@ async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 def main():
     # Получаем токен бота из переменной окружения (рекомендуется для безопасности)
-    token = "7767052595:AAHSLtGeGeBUDXpdcnV80PECZxuqzlbRpJs"
+    token = "7513399282:AAFX_mhtAb_UkzpGPcELWDavQ6suTiQ_OBU"
     application = ApplicationBuilder().token(token).build()
 
     application.add_handler(CommandHandler("start", start))
