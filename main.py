@@ -186,9 +186,7 @@ async def inline_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
         InlineQueryResultArticle(
             id=str(uuid.uuid4()),
             title="Моя реферальная ссылка",
-            input_message_content=InputTextMessageContent(
-                f"Присоединяйся к боту: {referral_link}"
-            ),
+            InputTextMessageContent(referral_link)
         )
     ]
     await update.inline_query.answer(results)
