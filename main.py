@@ -819,6 +819,13 @@ def main():
     application.job_queue.run_daily(daily_reminder, reminder_time, name="daily_reminder")
 
     logger.info("Бот запущен...")
+    async def main():
+    # Удаление вебхука перед запуском polling
+    await application.bot.delete_webhook(drop_pending_updates=True)
+
+    # Запуск бота в режиме polling
+    await application.run_polling()
+
     application.run_polling()
 
 if __name__ == "__main__":
