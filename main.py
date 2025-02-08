@@ -753,4 +753,7 @@ async def main():
     await application.run_polling()
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    import sys
+    if sys.platform.startswith('win'):  # Для Windows
+        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+    asyncio.get_event_loop().run_until_complete(main())
