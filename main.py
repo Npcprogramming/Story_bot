@@ -785,6 +785,15 @@ async def show_users_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
     total_users = cursor.fetchone()[0]
     await query.edit_message_text(f"Общее количество пользователей: {total_users}")
 
+# Текст последнего блока для проверки
+END_TEXT = (
+    "Как я и обещал в самом начале – эта история бесконечна. \n\n"
+    "Но в этом нет смысла без читателей. Если увижу, что людей заинтересовало, то начну выпускать продолжение:\n\n"
+    "В этом же боте. Ежедневно. В 22:00 по МСК. Начиная с 1 марта.\n\n"
+    "Так что постарайся распространить ссылку на этого бота всем знакомым. Вот она: @HotelSpringBot\n\n"
+    "Этим ты очень сильно поможешь❤️"
+)
+
 # Ежедневное напоминание пользователям, чей рассказ ещё не дочитан до конца
 async def daily_reminder(context: ContextTypes.DEFAULT_TYPE):
     cursor.execute("SELECT id, story_progress FROM users")
@@ -792,7 +801,8 @@ async def daily_reminder(context: ContextTypes.DEFAULT_TYPE):
     for user in users:
         user_id, story_progress = user
         part = get_story_part(story_progress)
-        if part["text"] != "История закончена.":
+        
+        if part["text"] != END_TEXT:  # Проверка на окончание истории
             try:
                 await context.bot.send_message(
                     chat_id=user_id,
