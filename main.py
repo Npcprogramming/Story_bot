@@ -685,6 +685,20 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=keyboard
     )
 
+async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    cursor.execute("SELECT referrals_count, story_progress FROM users WHERE id = ?", (user_id,))
+    result = cursor.fetchone()
+    if not result:
+        await update.message.reply_text("Пользователь не найден. Запустите /start для регистрации.")
+        return
+    referrals_count, story_progress = result
+    await update.message.reply_text(
+        f"Ваша статистика:\n"
+        f"Приглашено друзей: {referrals_count}\n"
+        f"Прогресс истории: Часть {story_progress}"
+    )
+
 # Остальные функции остаются без изменений
 
 def main():
