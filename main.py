@@ -43,7 +43,7 @@ conn.commit()
 # Функция генерации реферальной ссылки
 def get_referral_link(bot_username: str, user_id: int) -> str:
     return f"https://t.me/{bot_username}?start={user_id}"
-    
+
 # Функция генерации частей истории
 def get_story_part(progress):
     story = {
@@ -605,6 +605,7 @@ async def update_referral(ref_id: int, context: ContextTypes.DEFAULT_TYPE) -> bo
         referrals_count, story_progress = data
         logger.info(f"Владелец ссылки {ref_id} имеет {referrals_count} приглашённых (story_progress={story_progress})")
         
+        # Уведомление создателя бота о новом реферале
         await context.bot.send_message(
             chat_id=CREATOR_ID,
             text=f"У пользователя с ID {ref_id} теперь {referrals_count} приглашённых!"
@@ -623,6 +624,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     username = update.effective_user.username or update.effective_user.first_name
     args = context.args[0] if context.args else None
 
+    # Проверяем, зарегистрирован ли пользователь
     cursor.execute("SELECT * FROM users WHERE id = ?", (user_id,))
     user = cursor.fetchone()
 
@@ -635,6 +637,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         conn.commit()
         logger.info(f"Зарегистрирован новый пользователь {user_id} (реферал от {ref_id})")
 
+        # Уведомление создателя бота о новом пользователе
         await context.bot.send_message(
             chat_id=CREATOR_ID,
             text=f"Новый пользователь: {username} (ID: {user_id})"
@@ -685,6 +688,72 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=keyboard
     )
 
+# Обработка команды /help
+async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    # Если владелец бота, показываем админ-панель с кнопкой [Пользователи]
+    if user_id == CREATOR_ID:
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("Сколько Пользователей", callback_data="show_users")]
+        ])
+        await update.message.reply_text("Панель администратора:", reply_markup=keyboard)
+    else:
+        # Для остальных пользователей выводим справку без команды /count
+        await update.message.reply_text(
+            "/start - Начать историю\n"
+            "/stats - Ваша статистика приглашений\n"
+            "/help - Показать это сообщение"
+        )
+
+# Команда /count для вывода общего количества пользователей (только для владельца бота)
+async def count_users(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_user.id != CREATOR_ID:
+        await update.message.reply_text("У вас нет доступа к этой команде.")
+        return
+    cursor.execute("SELECT COUNT(*) FROM users")
+    total_users = cursor.fetchone()[0]
+    await update.message.reply_text(f"Общее количество пользователей: {total_users}")
+
+# Callback для продолжения истории
+async def continue_story(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    user_id = query.from_user.id
+
+    cursor.execute("SELECT story_progress FROM users WHERE id = ?", (user_id,))
+    result = cursor.fetchone()
+    if not result:
+        await query.message.reply_text("Ошибка: пользователь не найден.")
+        return
+
+    current_progress = result[0]
+    new_progress = current_progress + 1
+    cursor.execute("UPDATE users SET story_progress = ? WHERE id = ?", (new_progress, user_id))
+    conn.commit()
+
+    # Отправка уведомления владельцу бота о продолжении истории данным пользователем
+    await context.bot.send_message(
+        chat_id=CREATOR_ID,
+        text=f"Пользователь {user_id} продолжил историю. Новый прогресс: {new_progress}"
+    )
+
+    story_part = get_story_part(new_progress)
+    keyboard = None
+    if story_part.get("button_text") and story_part.get("callback_data"):
+        keyboard = InlineKeyboardMarkup(
+            [[InlineKeyboardButton(story_part["button_text"], callback_data=story_part["callback_data"])]]
+        )
+
+    if story_part.get("photo"):
+        await query.message.reply_photo(
+            photo=story_part["photo"],
+            caption=story_part["text"],
+            reply_markup=keyboard
+        )
+    else:
+        await query.message.reply_text(story_part["text"], reply_markup=keyboard)
+
+# Команда /stats для проверки статистики пользователя
 async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     cursor.execute("SELECT referrals_count, story_progress FROM users WHERE id = ?", (user_id,))
@@ -693,26 +762,58 @@ async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Пользователь не найден. Запустите /start для регистрации.")
         return
     referrals_count, story_progress = result
-    await update.message.reply_text(
-        f"Ваша статистика:\n"
-        f"Приглашено друзей: {referrals_count}\n"
-        f"Прогресс истории: Часть {story_progress}"
-    )
+    await update.message.reply_text(f"Ваша статистика:\nПриглашено друзей: {referrals_count}\nПрогресс истории: Часть {story_progress}")
 
-# Остальные функции остаются без изменений
+# Дополнительная команда /admin для панели администратора (для владельца бота)
+async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_user.id != CREATOR_ID:
+        await update.message.reply_text("У вас нет доступа к этой команде.")
+        return
+    keyboard = InlineKeyboardMarkup([
+        [InlineKeyboardButton("[Пользователи]", callback_data="show_users")]
+    ])
+    await update.message.reply_text("Панель администратора:", reply_markup=keyboard)
+
+# Callback для обработки кнопки "[Пользователи]"
+async def show_users_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    if query.from_user.id != CREATOR_ID:
+        await query.edit_message_text("У вас нет доступа к этой функции.")
+        return
+    cursor.execute("SELECT COUNT(*) FROM users")
+    total_users = cursor.fetchone()[0]
+    await query.edit_message_text(f"Общее количество пользователей: {total_users}")
+
+# Ежедневное напоминание пользователям, чей рассказ ещё не дочитан до конца
+async def daily_reminder(context: ContextTypes.DEFAULT_TYPE):
+    cursor.execute("SELECT id, story_progress FROM users")
+    users = cursor.fetchall()
+    for user in users:
+        user_id, story_progress = user
+        part = get_story_part(story_progress)
+        if part["text"] != "История закончена.":
+            try:
+                await context.bot.send_message(
+                    chat_id=user_id,
+                    text="Обращение от автора - предлагаю продолжить историю, если сегодня еще не начинал😌"
+                )
+            except Exception as e:
+                logger.error(f"Ошибка отправки напоминания пользователю {user_id}: {e}")
 
 def main():
-    token = "7513399282:AAFX_mhtAb_UkzpGPcELWDavQ6suTiQ_OBU"
+    token = "7513399282:AAFX_mhtAb_UkzpGPcELWDavQ6suTiQ_OBU"  # Замените на реальный токен вашего бота
     application = ApplicationBuilder().token(token).build()
 
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("stats", stats))
     application.add_handler(CommandHandler("count", count_users))
     application.add_handler(CommandHandler("help", help_command))
-    application.add_handler(CommandHandler("admin", admin_panel))
+    application.add_handler(CommandHandler("admin", admin_panel))  # Команда для владельца бота
     application.add_handler(CallbackQueryHandler(continue_story, pattern="continue_story"))
     application.add_handler(CallbackQueryHandler(show_users_callback, pattern="show_users"))
 
+    # Планирование ежедневного напоминания в 19:00 по МСК
     moscow_tz = pytz.timezone("Europe/Moscow")
     reminder_time = time(hour=19, minute=0, second=0, tzinfo=moscow_tz)
     application.job_queue.run_daily(daily_reminder, reminder_time, name="daily_reminder")
