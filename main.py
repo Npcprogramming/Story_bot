@@ -732,16 +732,16 @@ async def daily_reminder(context: ContextTypes.DEFAULT_TYPE):
                 logger.error(f"Ошибка отправки напоминания пользователю {user_id}: {e}")
 
 # Основная функция запуска бота
-async def main():
+def main():
     token = "7513399282:AAFX_mhtAb_UkzpGPcELWDavQ6suTiQ_OBU"  # Замените на реальный токен вашего бота
     application = ApplicationBuilder().token(token).build()
 
-    # Удаление вебхука перед запуском polling
-    await application.bot.delete_webhook(drop_pending_updates=True)
-
-    # Добавление обработчиков
     application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("stats", stats))
+    application.add_handler(CommandHandler("count", count_users))
     application.add_handler(CommandHandler("help", help_command))
+    application.add_handler(CommandHandler("admin", admin_panel))  # Команда для владельца бота
+    application.add_handler(CallbackQueryHandler(continue_story, pattern="continue_story"))
     application.add_handler(CallbackQueryHandler(show_users_callback, pattern="show_users"))
 
     # Планирование ежедневного напоминания в 19:00 по МСК
@@ -750,10 +750,15 @@ async def main():
     application.job_queue.run_daily(daily_reminder, reminder_time, name="daily_reminder")
 
     logger.info("Бот запущен...")
-    await application.run_polling()
+
+    # Удаление вебхука перед запуском polling и запуск бота
+    async def run():
+        await application.bot.delete_webhook(drop_pending_updates=True)
+        await application.run_polling()
+
+    # Запуск асинхронной функции
+    import asyncio
+    asyncio.run(run())
 
 if __name__ == "__main__":
-    import sys
-    if sys.platform.startswith('win'):  # Для Windows
-        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
-    asyncio.get_event_loop().run_until_complete(main())
+    main()
