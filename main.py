@@ -3,7 +3,6 @@ import sqlite3
 import urllib.parse
 from datetime import time
 import pytz
-import asyncio  # Добавляем для запуска асинхронной функции
 
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
@@ -21,7 +20,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # ID создателя бота для отправки уведомлений и доступа к админ-панели
-CREATOR_ID = 7033808522  # Замените на ваш Telegram ID
+CREATOR_ID = 7033808522   # Замените на ваш Telegram ID
 
 # Подключение к базе данных SQLite
 conn = sqlite3.connect("users.db", check_same_thread=False)
@@ -44,7 +43,7 @@ conn.commit()
 # Функция генерации реферальной ссылки
 def get_referral_link(bot_username: str, user_id: int) -> str:
     return f"https://t.me/{bot_username}?start={user_id}"
-
+    
 # Функция генерации частей истории
 def get_story_part(progress):
     story = {
@@ -606,7 +605,6 @@ async def update_referral(ref_id: int, context: ContextTypes.DEFAULT_TYPE) -> bo
         referrals_count, story_progress = data
         logger.info(f"Владелец ссылки {ref_id} имеет {referrals_count} приглашённых (story_progress={story_progress})")
         
-        # Уведомление создателя бота о новом реферале
         await context.bot.send_message(
             chat_id=CREATOR_ID,
             text=f"У пользователя с ID {ref_id} теперь {referrals_count} приглашённых!"
@@ -625,7 +623,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     username = update.effective_user.username or update.effective_user.first_name
     args = context.args[0] if context.args else None
 
-    # Проверяем, зарегистрирован ли пользователь
     cursor.execute("SELECT * FROM users WHERE id = ?", (user_id,))
     user = cursor.fetchone()
 
@@ -638,7 +635,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         conn.commit()
         logger.info(f"Зарегистрирован новый пользователь {user_id} (реферал от {ref_id})")
 
-        # Уведомление создателя бота о новом пользователе
         await context.bot.send_message(
             chat_id=CREATOR_ID,
             text=f"Новый пользователь: {username} (ID: {user_id})"
@@ -689,76 +685,26 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=keyboard
     )
 
-# Обработка команды /help
-async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    if user_id == CREATOR_ID:
-        keyboard = InlineKeyboardMarkup([
-            [InlineKeyboardButton("Сколько Пользователей", callback_data="show_users")]
-        ])
-        await update.message.reply_text("Панель администратора:", reply_markup=keyboard)
-    else:
-        await update.message.reply_text(
-            "/start - Начать историю\n"
-            "/stats - Ваша статистика приглашений\n"
-            "/help - Показать это сообщение"
-        )
+# Остальные функции остаются без изменений
 
-# Callback для показа количества пользователей
-async def show_users_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    if query.from_user.id != CREATOR_ID:
-        await query.edit_message_text("У вас нет доступа к этой функции.")
-        return
-    cursor.execute("SELECT COUNT(*) FROM users")
-    total_users = cursor.fetchone()[0]
-    await query.edit_message_text(f"Общее количество пользователей: {total_users}")
-
-# Ежедневное напоминание пользователям
-async def daily_reminder(context: ContextTypes.DEFAULT_TYPE):
-    cursor.execute("SELECT id, story_progress FROM users")
-    users = cursor.fetchall()
-    for user in users:
-        user_id, story_progress = user
-        part = get_story_part(story_progress)
-        if part and part.get("text") != "История закончена.":
-            try:
-                await context.bot.send_message(
-                    chat_id=user_id,
-                    text="Обращение от автора - предлагаю продолжить историю, если сегодня еще не начинал😌"
-                )
-            except Exception as e:
-                logger.error(f"Ошибка отправки напоминания пользователю {user_id}: {e}")
-
-# Основная функция запуска бота
 def main():
-    token = "7513399282:AAFX_mhtAb_UkzpGPcELWDavQ6suTiQ_OBU"  # Замените на реальный токен вашего бота
+    token = "7513399282:AAFX_mhtAb_UkzpGPcELWDavQ6suTiQ_OBU"
     application = ApplicationBuilder().token(token).build()
 
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("stats", stats))
     application.add_handler(CommandHandler("count", count_users))
     application.add_handler(CommandHandler("help", help_command))
-    application.add_handler(CommandHandler("admin", admin_panel))  # Команда для владельца бота
+    application.add_handler(CommandHandler("admin", admin_panel))
     application.add_handler(CallbackQueryHandler(continue_story, pattern="continue_story"))
     application.add_handler(CallbackQueryHandler(show_users_callback, pattern="show_users"))
 
-    # Планирование ежедневного напоминания в 19:00 по МСК
     moscow_tz = pytz.timezone("Europe/Moscow")
     reminder_time = time(hour=19, minute=0, second=0, tzinfo=moscow_tz)
     application.job_queue.run_daily(daily_reminder, reminder_time, name="daily_reminder")
 
     logger.info("Бот запущен...")
-
-    # Удаление вебхука перед запуском polling и запуск бота
-    async def run():
-        await application.bot.delete_webhook(drop_pending_updates=True)
-        await application.run_polling()
-
-    # Запуск асинхронной функции
-    import asyncio
-    asyncio.run(run())
+    application.run_polling()
 
 if __name__ == "__main__":
     main()
